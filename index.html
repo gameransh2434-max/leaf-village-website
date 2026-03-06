@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leaf Village | Minecraft Server</title>
+  <style>
+    :root {
+      --bg: #0b1a12;
+      --panel: rgba(17, 40, 29, 0.84);
+      --panel-border: rgba(132, 225, 168, 0.35);
+      --text: #edfdf3;
+      --muted: #a8c7b4;
+      --accent: #7de7a6;
+      --accent-dark: #4eb97a;
+      --danger: #ffcc89;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(125, 231, 166, 0.12), transparent 40%),
+        radial-gradient(circle at bottom left, rgba(96, 175, 255, 0.16), transparent 45%),
+        var(--bg);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .card {
+      width: min(900px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 22px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+      padding: 28px;
+      backdrop-filter: blur(8px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+
+    .logo {
+      width: 58px;
+      height: 58px;
+      border-radius: 16px;
+      background: linear-gradient(145deg, #86f0b1, #3f9261);
+      display: grid;
+      place-items: center;
+      font-size: 30px;
+      box-shadow: inset 0 -8px 18px rgba(0, 0, 0, 0.2);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 3.5vw, 2.35rem);
+      letter-spacing: 0.02em;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .grid {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      background: rgba(10, 25, 19, 0.7);
+      border: 1px solid rgba(125, 231, 166, 0.2);
+      border-radius: 16px;
+      padding: 16px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 0.86rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .value {
+      font-size: 1.15rem;
+      font-weight: 600;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(125, 231, 166, 0.35);
+      background: rgba(73, 149, 104, 0.12);
+      font-size: 0.9rem;
+      color: #cbf7dc;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #6defa0;
+      box-shadow: 0 0 0 6px rgba(109, 239, 160, 0.15);
+    }
+
+    .players-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+      max-height: 208px;
+      overflow: auto;
+    }
+
+    .players-list li {
+      background: rgba(125, 231, 166, 0.1);
+      border: 1px solid rgba(125, 231, 166, 0.22);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.96rem;
+    }
+
+    .players-empty {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin: 0;
+    }
+
+    .actions {
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .leaf-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 12px 20px;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      background: linear-gradient(140deg, var(--accent), var(--accent-dark));
+      color: #032c13;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 10px 24px rgba(61, 156, 102, 0.4);
+    }
+
+    .leaf-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 28px rgba(61, 156, 102, 0.52);
+    }
+
+    .leaf-btn:active {
+      transform: translateY(1px);
+    }
+
+    #copy-message {
+      color: var(--danger);
+      font-size: 0.92rem;
+    }
+
+    footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <section class="brand">
+      <div class="logo" aria-hidden="true">🍃</div>
+      <div>
+        <h1>Leaf Village</h1>
+        <p class="subtitle">Professional Minecraft Bedrock server community hub</p>
+      </div>
+    </section>
+
+    <div class="status" id="server-status">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="status-text">Checking server status...</span>
+    </div>
+
+    <section class="grid" aria-label="Server details and live players">
+      <article class="panel">
+        <p class="label">Server IP</p>
+        <p class="value" id="server-ip">leafvillage.pikz.online</p>
+
+        <p class="label" style="margin-top: 14px;">Port</p>
+        <p class="value" id="server-port">19169</p>
+
+        <p class="label" style="margin-top: 14px;">Players Online</p>
+        <p class="value" id="player-count">Loading...</p>
+      </article>
+
+      <article class="panel">
+        <p class="label">Playing Right Now</p>
+        <ul class="players-list" id="players-list" hidden></ul>
+        <p class="players-empty" id="players-empty">Loading player list...</p>
+      </article>
+    </section>
+
+    <section class="actions">
+      <button class="leaf-btn" id="leaf-copy-btn" type="button" aria-label="Copy server IP and port">
+        🍃 Leaf Button — Copy IP & Port
+      </button>
+      <span id="copy-message" role="status" aria-live="polite"></span>
+    </section>
+
+    <footer>
+      Connect using <strong>leafvillage.pikz.online</strong> on port <strong>19169</strong>.
+    </footer>
+  </main>
+
+  <script>
+    const SERVER_HOST = "leafvillage.pikz.online";
+    const SERVER_PORT = 19169;
+    const COPY_TEXT = `IP: ${SERVER_HOST} | PORT: ${SERVER_PORT}`;
+
+    const playerCountEl = document.getElementById("player-count");
+    const playersListEl = document.getElementById("players-list");
+    const playersEmptyEl = document.getElementById("players-empty");
+    const statusTextEl = document.getElementById("status-text");
+    const copyMessageEl = document.getElementById("copy-message");
+    const leafButtonEl = document.getElementById("leaf-copy-btn");
+
+    async function loadServerData() {
+      try {
+        const response = await fetch(`https://api.mcsrvstat.us/bedrock/3/${SERVER_HOST}:${SERVER_PORT}`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch server status");
+        }
+
+        const data = await response.json();
+        const isOnline = Boolean(data.online);
+
+        if (!isOnline) {
+          statusTextEl.textContent = "Server appears offline right now.";
+          playerCountEl.textContent = "0 / 0";
+          playersEmptyEl.textContent = "No players online.";
+          playersListEl.hidden = true;
+          return;
+        }
+
+        statusTextEl.textContent = "Server is online and ready for players.";
+
+        const online = data.players?.online ?? 0;
+        const max = data.players?.max ?? "?";
+        playerCountEl.textContent = `${online} / ${max}`;
+
+        const players = Array.isArray(data.players?.list) ? data.players.list : [];
+        if (players.length === 0) {
+          playersEmptyEl.textContent = "No player names available right now.";
+          playersListEl.hidden = true;
+          return;
+        }
+
+        playersListEl.innerHTML = "";
+        players.forEach((name) => {
+          const li = document.createElement("li");
+          li.textContent = name;
+          playersListEl.appendChild(li);
+        });
+
+        playersEmptyEl.hidden = true;
+        playersListEl.hidden = false;
+      } catch (error) {
+        statusTextEl.textContent = "Could not fetch live data. Showing connection details.";
+        playerCountEl.textContent = "Unavailable";
+        playersEmptyEl.textContent = "Player list unavailable (API/network issue).";
+        playersListEl.hidden = true;
+      }
+    }
+
+    async function copyServerInfo() {
+      try {
+        await navigator.clipboard.writeText(COPY_TEXT);
+        copyMessageEl.style.color = "#8ef5b9";
+        copyMessageEl.textContent = "Copied! Paste it in Minecraft to join Leaf Village.";
+      } catch (error) {
+        copyMessageEl.style.color = "#ffcc89";
+        copyMessageEl.textContent = `Copy failed. Please use: ${COPY_TEXT}`;
+      }
+
+      clearTimeout(copyServerInfo.timeout);
+      copyServerInfo.timeout = setTimeout(() => {
+        copyMessageEl.textContent = "";
+      }, 2800);
+    }
+
+    leafButtonEl.addEventListener("click", copyServerInfo);
+    loadServerData();
+  </script>
+</body>
+</html>
