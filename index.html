@@ -81,6 +81,30 @@
       gap: 16px;
     }
 
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .stat-chip {
+      background: rgba(125, 231, 166, 0.08);
+      border: 1px solid rgba(125, 231, 166, 0.2);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+
+    .stat-chip .label {
+      margin-bottom: 4px;
+      font-size: 0.75rem;
+    }
+
+    .stat-chip .value {
+      font-size: 0.95rem;
+      font-weight: 700;
+    }
+
     .panel {
       background: rgba(10, 25, 19, 0.7);
       border: 1px solid rgba(125, 231, 166, 0.2);
@@ -223,6 +247,30 @@
         <ul class="players-list" id="players-list" hidden></ul>
         <p class="players-empty" id="players-empty">Loading player list...</p>
       </article>
+
+      <article class="panel">
+        <p class="label">PetroTicel Panel Server Stats</p>
+        <p class="value" id="panel-state">Loading panel stats...</p>
+        <p class="players-empty" id="panel-updated">Waiting for first update...</p>
+        <div class="stats-grid" aria-label="PetroTicel resource stats">
+          <div class="stat-chip">
+            <p class="label">CPU</p>
+            <p class="value" id="panel-cpu">--</p>
+          </div>
+          <div class="stat-chip">
+            <p class="label">Memory</p>
+            <p class="value" id="panel-memory">--</p>
+          </div>
+          <div class="stat-chip">
+            <p class="label">Disk</p>
+            <p class="value" id="panel-disk">--</p>
+          </div>
+          <div class="stat-chip">
+            <p class="label">Uptime</p>
+            <p class="value" id="panel-uptime">--</p>
+          </div>
+        </div>
+      </article>
     </section>
 
     <section class="actions">
@@ -241,6 +289,10 @@
     const SERVER_HOST = "leafvillage.pikz.online";
     const SERVER_PORT = 19169;
     const COPY_TEXT = `IP: ${SERVER_HOST} | PORT: ${SERVER_PORT}`;
+    const PETROTICEL_PANEL_BASE = "https://panel.petroticel.com";
+    const PETROTICEL_API_KEY = "ptlc_pmzdYcHnG7vhsQZXXuerA8AyEv7Hp0TXsmEoINmZqDW";
+    const PETROTICEL_SERVER_ID = "e46fc611-567e-4422-8b5d-8f8adcb07b43";
+    const PETROTICEL_REFRESH_MS = 30000;
 
     const playerCountEl = document.getElementById("player-count");
     const playersListEl = document.getElementById("players-list");
@@ -248,6 +300,91 @@
     const statusTextEl = document.getElementById("status-text");
     const copyMessageEl = document.getElementById("copy-message");
     const leafButtonEl = document.getElementById("leaf-copy-btn");
+    const panelStateEl = document.getElementById("panel-state");
+    const panelUpdatedEl = document.getElementById("panel-updated");
+    const panelCpuEl = document.getElementById("panel-cpu");
+    const panelMemoryEl = document.getElementById("panel-memory");
+    const panelDiskEl = document.getElementById("panel-disk");
+    const panelUptimeEl = document.getElementById("panel-uptime");
+
+    function bytesToMiB(bytes) {
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+    }
+
+    function millisToClock(ms) {
+      if (!Number.isFinite(ms) || ms <= 0) {
+        return "0m";
+      }
+
+      const totalSeconds = Math.floor(ms / 1000);
+      const days = Math.floor(totalSeconds / 86400);
+      const hours = Math.floor((totalSeconds % 86400) / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+      if (days > 0) {
+        return `${days}d ${hours}h ${minutes}m`;
+      }
+
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+      }
+
+      return `${minutes}m`;
+    }
+
+    async function fetchPanelResourcesWithFallback() {
+      const targetUrl = `${PETROTICEL_PANEL_BASE}/api/client/servers/${PETROTICEL_SERVER_ID}/resources`;
+      const endpoints = [
+        targetUrl,
+        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
+      ];
+
+      let lastError = new Error("Unknown panel API error");
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            headers: {
+              "Authorization": `Bearer ${PETROTICEL_API_KEY}`,
+              "Accept": "application/json"
+            }
+          });
+
+          if (!response.ok) {
+            lastError = new Error(`HTTP ${response.status}`);
+            continue;
+          }
+
+          return await response.json();
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError;
+    }
+
+    async function loadPetroTicelPanelStats() {
+      try {
+        const json = await fetchPanelResourcesWithFallback();
+        const resources = json.attributes?.resources || {};
+        const currentState = json.attributes?.current_state || "unknown";
+
+        panelStateEl.textContent = `State: ${currentState}`;
+        panelUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+        panelCpuEl.textContent = `${(resources.cpu_absolute ?? 0).toFixed(2)}%`;
+        panelMemoryEl.textContent = bytesToMiB(resources.memory_bytes ?? 0);
+        panelDiskEl.textContent = bytesToMiB(resources.disk_bytes ?? 0);
+        panelUptimeEl.textContent = millisToClock(resources.uptime ?? 0);
+      } catch (error) {
+        panelStateEl.textContent = "Panel stats unavailable right now.";
+        panelUpdatedEl.textContent = "Unable to reach PetroTicel API from this browser.";
+        panelCpuEl.textContent = "N/A";
+        panelMemoryEl.textContent = "N/A";
+        panelDiskEl.textContent = "N/A";
+        panelUptimeEl.textContent = "N/A";
+      }
+    }
 
     async function loadServerData() {
       try {
@@ -315,6 +452,8 @@
 
     leafButtonEl.addEventListener("click", copyServerInfo);
     loadServerData();
+    loadPetroTicelPanelStats();
+    setInterval(loadPetroTicelPanelStats, PETROTICEL_REFRESH_MS);
   </script>
 </body>
 </html>
