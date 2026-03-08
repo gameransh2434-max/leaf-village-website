@@ -305,6 +305,35 @@
     const panelDiskEl = document.getElementById("panel-disk");
     const panelUptimeEl = document.getElementById("panel-uptime");
 
+    function decodeProxyPayload(rawText) {
+      try {
+        return JSON.parse(rawText);
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function buildStatsSources() {
+      const encodedSource = encodeURIComponent(STATS_ENDPOINT);
+      return [
+        {
+          label: "direct endpoint",
+          url: STATS_ENDPOINT,
+          parser: (text) => decodeProxyPayload(text)
+        },
+        {
+          label: "corsproxy.io",
+          url: `https://corsproxy.io/?${encodedSource}`,
+          parser: (text) => decodeProxyPayload(text)
+        },
+        {
+          label: "allorigins",
+          url: `https://api.allorigins.win/raw?url=${encodedSource}`,
+          parser: (text) => decodeProxyPayload(text)
+        }
+      ];
+    }
+
     function bytesToMiB(bytes) {
       if (!Number.isFinite(bytes)) {
         return "N/A";
@@ -383,26 +412,52 @@
       return { cpu, memoryBytes, diskBytes, uptimeMs, state };
     }
 
+    async function fetchPerformancePayload() {
+      const sources = buildStatsSources();
+      const errors = [];
+
+      for (const source of sources) {
+        try {
+          const response = await fetch(source.url, {
+            cache: "no-store",
+            headers: { Accept: "application/json, text/plain, */*" }
+          });
+
+          if (!response.ok) {
+            errors.push(`${source.label}: HTTP ${response.status}`);
+            continue;
+          }
+
+          const rawText = await response.text();
+          const payload = source.parser(rawText);
+
+          if (payload && typeof payload === "object") {
+            return { payload, source: source.label };
+          }
+
+          errors.push(`${source.label}: response was not valid JSON`);
+        } catch (error) {
+          errors.push(`${source.label}: ${error.message}`);
+        }
+      }
+
+      throw new Error(errors.join(" | "));
+    }
+
     async function loadPerformanceStats() {
       try {
-        const response = await fetch(STATS_ENDPOINT, { cache: "no-store" });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const payload = await response.json();
+        const { payload, source } = await fetchPerformancePayload();
         const metrics = extractMetrics(payload);
 
         panelStateEl.textContent = `State: ${metrics.state}`;
-        panelUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+        panelUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()} (${source})`;
         panelCpuEl.textContent = metrics.cpu === null ? "N/A" : `${metrics.cpu.toFixed(2)}%`;
         panelMemoryEl.textContent = bytesToMiB(metrics.memoryBytes);
         panelDiskEl.textContent = bytesToMiB(metrics.diskBytes);
         panelUptimeEl.textContent = millisToClock(metrics.uptimeMs ?? 0);
       } catch (error) {
         panelStateEl.textContent = "Performance stats unavailable right now.";
-        panelUpdatedEl.textContent = "Unable to fetch from provided stats endpoint.";
+        panelUpdatedEl.textContent = `Fetch failed (${error.message})`;
         panelCpuEl.textContent = "N/A";
         panelMemoryEl.textContent = "N/A";
         panelDiskEl.textContent = "N/A";
