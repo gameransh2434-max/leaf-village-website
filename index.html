@@ -249,10 +249,10 @@
       </article>
 
       <article class="panel">
-        <p class="label">PetroTicel Panel Server Stats</p>
-        <p class="value" id="panel-state">Loading panel stats...</p>
+        <p class="label">Server Performance Stats</p>
+        <p class="value" id="panel-state">Loading performance stats...</p>
         <p class="players-empty" id="panel-updated">Waiting for first update...</p>
-        <div class="stats-grid" aria-label="PetroTicel resource stats">
+        <div class="stats-grid" aria-label="Server performance stats">
           <div class="stat-chip">
             <p class="label">CPU</p>
             <p class="value" id="panel-cpu">--</p>
@@ -289,10 +289,8 @@
     const SERVER_HOST = "leafvillage.pikz.online";
     const SERVER_PORT = 19169;
     const COPY_TEXT = `IP: ${SERVER_HOST} | PORT: ${SERVER_PORT}`;
-    const PETROTICEL_PANEL_BASE = "https://panel.petroticel.com";
-    const PETROTICEL_API_KEY = "ptlc_pmzdYcHnG7vhsQZXXuerA8AyEv7Hp0TXsmEoINmZqDW";
-    const PETROTICEL_SERVER_ID = "e46fc611-567e-4422-8b5d-8f8adcb07b43";
-    const PETROTICEL_REFRESH_MS = 30000;
+    const STATS_ENDPOINT = "http://103.173.20.174:19245/server/Server%201/performance";
+    const STATS_REFRESH_MS = 15000;
 
     const playerCountEl = document.getElementById("player-count");
     const playersListEl = document.getElementById("players-list");
@@ -307,7 +305,40 @@
     const panelDiskEl = document.getElementById("panel-disk");
     const panelUptimeEl = document.getElementById("panel-uptime");
 
+    function decodeProxyPayload(rawText) {
+      try {
+        return JSON.parse(rawText);
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function buildStatsSources() {
+      const encodedSource = encodeURIComponent(STATS_ENDPOINT);
+      return [
+        {
+          label: "direct endpoint",
+          url: STATS_ENDPOINT,
+          parser: (text) => decodeProxyPayload(text)
+        },
+        {
+          label: "corsproxy.io",
+          url: `https://corsproxy.io/?${encodedSource}`,
+          parser: (text) => decodeProxyPayload(text)
+        },
+        {
+          label: "allorigins",
+          url: `https://api.allorigins.win/raw?url=${encodedSource}`,
+          parser: (text) => decodeProxyPayload(text)
+        }
+      ];
+    }
+
     function bytesToMiB(bytes) {
+      if (!Number.isFinite(bytes)) {
+        return "N/A";
+      }
+
       return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
     }
 
@@ -332,53 +363,101 @@
       return `${minutes}m`;
     }
 
-    async function fetchPanelResourcesWithFallback() {
-      const targetUrl = `${PETROTICEL_PANEL_BASE}/api/client/servers/${PETROTICEL_SERVER_ID}/resources`;
-      const endpoints = [
-        targetUrl,
-        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
-      ];
-
-      let lastError = new Error("Unknown panel API error");
-
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            headers: {
-              "Authorization": `Bearer ${PETROTICEL_API_KEY}`,
-              "Accept": "application/json"
-            }
-          });
-
-          if (!response.ok) {
-            lastError = new Error(`HTTP ${response.status}`);
-            continue;
-          }
-
-          return await response.json();
-        } catch (error) {
-          lastError = error;
+    function findFirstNumber(candidateValues = []) {
+      for (const value of candidateValues) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) {
+          return parsed;
         }
       }
 
-      throw lastError;
+      return null;
     }
 
-    async function loadPetroTicelPanelStats() {
-      try {
-        const json = await fetchPanelResourcesWithFallback();
-        const resources = json.attributes?.resources || {};
-        const currentState = json.attributes?.current_state || "unknown";
+    function extractMetrics(payload) {
+      const attrs = payload?.attributes || {};
+      const resources = attrs.resources || payload?.resources || payload?.stats || {};
 
-        panelStateEl.textContent = `State: ${currentState}`;
-        panelUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
-        panelCpuEl.textContent = `${(resources.cpu_absolute ?? 0).toFixed(2)}%`;
-        panelMemoryEl.textContent = bytesToMiB(resources.memory_bytes ?? 0);
-        panelDiskEl.textContent = bytesToMiB(resources.disk_bytes ?? 0);
-        panelUptimeEl.textContent = millisToClock(resources.uptime ?? 0);
+      const cpu = findFirstNumber([
+        resources.cpu_absolute,
+        resources.cpu,
+        attrs.cpu,
+        payload?.cpu
+      ]);
+
+      const memoryBytes = findFirstNumber([
+        resources.memory_bytes,
+        resources.memory,
+        attrs.memory_bytes,
+        payload?.memory_bytes,
+        payload?.memory
+      ]);
+
+      const diskBytes = findFirstNumber([
+        resources.disk_bytes,
+        resources.disk,
+        attrs.disk_bytes,
+        payload?.disk_bytes,
+        payload?.disk
+      ]);
+
+      const uptimeMs = findFirstNumber([
+        resources.uptime,
+        attrs.uptime,
+        payload?.uptime
+      ]);
+
+      const state = attrs.current_state || payload?.state || payload?.status || "unknown";
+
+      return { cpu, memoryBytes, diskBytes, uptimeMs, state };
+    }
+
+    async function fetchPerformancePayload() {
+      const sources = buildStatsSources();
+      const errors = [];
+
+      for (const source of sources) {
+        try {
+          const response = await fetch(source.url, {
+            cache: "no-store",
+            headers: { Accept: "application/json, text/plain, */*" }
+          });
+
+          if (!response.ok) {
+            errors.push(`${source.label}: HTTP ${response.status}`);
+            continue;
+          }
+
+          const rawText = await response.text();
+          const payload = source.parser(rawText);
+
+          if (payload && typeof payload === "object") {
+            return { payload, source: source.label };
+          }
+
+          errors.push(`${source.label}: response was not valid JSON`);
+        } catch (error) {
+          errors.push(`${source.label}: ${error.message}`);
+        }
+      }
+
+      throw new Error(errors.join(" | "));
+    }
+
+    async function loadPerformanceStats() {
+      try {
+        const { payload, source } = await fetchPerformancePayload();
+        const metrics = extractMetrics(payload);
+
+        panelStateEl.textContent = `State: ${metrics.state}`;
+        panelUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()} (${source})`;
+        panelCpuEl.textContent = metrics.cpu === null ? "N/A" : `${metrics.cpu.toFixed(2)}%`;
+        panelMemoryEl.textContent = bytesToMiB(metrics.memoryBytes);
+        panelDiskEl.textContent = bytesToMiB(metrics.diskBytes);
+        panelUptimeEl.textContent = millisToClock(metrics.uptimeMs ?? 0);
       } catch (error) {
-        panelStateEl.textContent = "Panel stats unavailable right now.";
-        panelUpdatedEl.textContent = "Unable to reach PetroTicel API from this browser.";
+        panelStateEl.textContent = "Performance stats unavailable right now.";
+        panelUpdatedEl.textContent = `Fetch failed (${error.message})`;
         panelCpuEl.textContent = "N/A";
         panelMemoryEl.textContent = "N/A";
         panelDiskEl.textContent = "N/A";
@@ -452,8 +531,8 @@
 
     leafButtonEl.addEventListener("click", copyServerInfo);
     loadServerData();
-    loadPetroTicelPanelStats();
-    setInterval(loadPetroTicelPanelStats, PETROTICEL_REFRESH_MS);
+    loadPerformanceStats();
+    setInterval(loadPerformanceStats, STATS_REFRESH_MS);
   </script>
 </body>
 </html>
